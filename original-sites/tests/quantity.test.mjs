@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {prepare,today} from '../lib/domain.ts';
+const s={products:[{code:'P001',name:'Aceite',active:true,unit:'ml'}],operations:[{seq:1,type:'Apertura',date:today()}],lines:[{seq:1,code:'P001',delta:1,value:2}],openings:[{code:'P001',seq:1}],members:[]};
+const d={type:'Traspaso',date:today(),destination:'María Victoria',reference:'',notes:'',lines:[{code:'P001',quantity:1.000001,price:0}]};
+assert.throws(()=>prepare(s,d,'almacen'),/sólo hay/);
+d.lines[0].quantity=0.000000001;assert.throws(()=>prepare(s,d,'almacen'),/mínima/);
+d.lines[0].quantity=1;assert.equal(prepare(s,d,'almacen')[0].delta,-1);
+console.log('PASS: quantities cannot exceed stock by the smallest supported unit or round to a zero movement.');
+assert.throws(()=>prepare({...s,products:[{...s.products[0],name:'  '}]},d,'almacen'),/producto activo/);
+assert.throws(()=>prepare(s,{...d,date:'2026-99-99'},'almacen'),/fecha válida/);
+const returned={...s,operations:[...s.operations,{seq:2,type:'Traspaso',folio:'MOV-TEST',date:today(),destination:'María Victoria'}],lines:[...s.lines,{seq:2,code:'P001',quantity:1,price:2,delta:-1,value:-2}]};
+const back={...d,type:'Devolución cocina',reference:'MOV-TEST',lines:[{code:'P001',quantity:1.000001,price:0}]};
+assert.throws(()=>prepare(returned,back,'almacen'),/supera lo entregado/);
+back.lines[0].quantity=1;assert.equal(prepare(returned,back,'almacen')[0].delta,1);
+console.log('PASS: reserved products, invalid dates and excess returns are rejected.');
