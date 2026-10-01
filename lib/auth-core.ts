@@ -4,7 +4,7 @@ import { database } from './db';
 function verifyScrypt(password: string, hash: string): boolean {
   try {
     if (!hash.startsWith('scrypt$')) return false;
-    const [, salt, keyHex] = hash.split('$');
+    const [_, salt, keyHex] = hash.split('$');
     if (!salt || !keyHex) return false;
     const derived = crypto.scryptSync(password, salt, 64) as Buffer;
     const key = Buffer.from(keyHex, 'hex');
@@ -27,10 +27,10 @@ export async function verifyUser(email: string, password: string) {
     } catch {}
   }
   if (!row || !row.password_hash) return null;
-  
+
   const ok = verifyScrypt(password, row.password_hash);
   if (!ok) return null;
-  
+
   return { email: row.email, role: row.role, name: row.name || 'Admin' };
 }
 
