@@ -1,71 +1,48 @@
-import crypto from 'node:crypto';
+// Utilidades de seguridad (sin dependencias de Next): contraseñas y sesiones firmadas.
+import { createHmac, randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
 
 export const SESSION_COOKIE = 'abasto_session';
-export const SESSION_SECONDS = 60 * 60 * 24 * 7;
-
-function getSecret(): string {
-  return process.env.AUTH_SECRET || process.env.SESSION_SECRET || 'abasto-secret-xalapa-2026';
-}
-
-export function safeEqual(a: string, b: string): boolean {
-  try {
-    const bufA = Buffer.from(a);
-    const bufB = Buffer.from(b);
-    if (bufA.length!== bufB.length) return false;
-    return crypto.timingSafeEqual(bufA, bufB);
-  } catch {
-    return a === b;
-  }
-}
-
-function verifyScrypt(password: string, hash: string): boolean {
-  try {
-    if (!hash.startsWith('scrypt$')) return false;
-    const parts = hash.split('$');
-    const salt = parts[1];
-    const keyHex = parts[2];
-    if (!salt ||!keyHex) return false;
-    const derived = crypto.scryptSync(password, salt, 64) as Buffer;
-    const key = Buffer.from(keyHex, 'hex');
-    if (derived.length!== key.length) return false;
-    return crypto.timingSafeEqual(derived, key);
-  } catch {
-    return false;
-  }
-}
-
-export function verifyPassword(password: string, hash: string): boolean {
-  if (!hash || hash === 'scrypt$08$00') return false;
-  return verifyScrypt(password, hash);
-}
+export const SESSION_SECONDS = 60 * 60 * 24 * 14; // 14 días
 
 export function hashPassword(password: string): string {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const derived = crypto.scryptSync(password, salt, 64) as Buffer;
-  return `scrypt$${salt}$${derived.toString('hex')}`;
+  const salt = randomBytes(16).toString('hex');
+  const hash = scryptSync(password, salt, 64).toString('hex');
+  return `scrypt$${salt}$${hash}`;
 }
-
+export function verifyPassword(password: string, stored: string | null | undefined): boolean {
+  if (!stored) return false;
+  const [kind, salt, hash] = stored.split('$');
+  if (kind !== 'scrypt' || !salt || !hash) return false;
+  const a = Buffer.from(hash, 'hex'), b = scryptSync(password, salt, 64);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+export function safeEqual(a: string, b: string): boolean {
+  const x = createHash('sha256').update(a).digest(), y = createHash('sha256').update(b).digest();
+  return timingSafeEqual(x, y);
+}
+function secret(): string {
+  const s = process.env.SESSION_SECRET;
+  if (!s || s.length < 16) throw new Error('Falta SESSION_SECRET en el archivo .env (ejecuta npm run dev para generarlo).');
+  return s;
+}
+export type Session = { email: string; name: string; exp: number };
 export function signSession(email: string, name: string): string {
-  const payload = Buffer.from(JSON.stringify({ email, name, exp: Date.now() + SESSION_SECONDS * 1000 })).toString('base64url');
-  const sig = crypto.createHmac('sha256', getSecret()).update(payload).digest('base64url');
-  return `${payload}.${sig}`;
+  const body = Buffer.from(JSON.stringify({ email, name, exp: Math.floor(Date.now() / 1000) + SESSION_SECONDS } satisfies Session)).toString('base64url');
+  return body + '.' + createHmac('sha256', secret()).update(body).digest('base64url');
 }
-
-export function parseSession(token: string): { email: string; name: string } | null {
+export function readSession(token: string | undefined): Session | null {
+  if (!token) return null;
+  const [body, sig] = token.split('.');
+  if (!body || !sig) return null;
+  const expected = createHmac('sha256', secret()).update(body).digest('base64url');
+  if (!safeEqual(sig, expected)) return null;
   try {
-    const [payload, sig] = token.split('.');
-    if (!payload ||!sig) return null;
-    const expected = crypto.createHmac('sha256', getSecret()).update(payload).digest('base64url');
-    if (!safeEqual(sig, expected)) return null;
-    const data = JSON.parse(Buffer.from(payload, 'base64url').toString());
-    if (data.exp && Date.now() > data.exp) return null;
-    return { email: data.email, name: data.name };
-  } catch {
-    return null;
-  }
+    const s = JSON.parse(Buffer.from(body, 'base64url').toString()) as Session;
+    return s.exp > Date.now() / 1000 && s.email ? s : null;
+  } catch { return null; }
 }
 
-// Alias para compatibilidad con tu session.ts y server.ts
-export const readSession = parseSession;
-export const getSession = parseSession;
-export const verifySession = parseSession;
+// Alias de compatibilidad: distintos módulos pueden importar cualquiera de estos nombres.
+export const parseSession = readSession;
+export const getSession = readSession;
+export const verifySession = readSession;
