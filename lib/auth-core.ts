@@ -64,3 +64,8 @@ export function parseSession(token: string): { email: string; name: string } | n
     return null;
   }
 }
+
+// Alias para compatibilidad con tu session.ts y server.ts
+export const readSession = parseSession;
+export const getSession = parseSession;
+export const verifySession = parseSession;
