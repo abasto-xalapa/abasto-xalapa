@@ -1,4 +1,4 @@
-import { DatabaseSync } from 'node:sqlite';
+const { DatabaseSync } = require('node:sqlite');
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes, scryptSync } from 'node:crypto';
