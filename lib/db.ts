@@ -44,7 +44,7 @@ export function database(): Db {
  
 const file = path.resolve(process.env.DATABASE_PATH || (process.env.VERCEL ? '/tmp/.data/abasto.sqlite' : './.data/abasto.sqlite'));
 fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.mkdirSync(path.dirname(file), { recursive: true });
+  
   const raw = new sqlite.DatabaseSync(file);
   raw.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
   raw.exec(SCHEMA);
