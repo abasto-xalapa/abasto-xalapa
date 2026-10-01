@@ -41,7 +41,7 @@ const g = globalThis as unknown as { __abastoDb?: Db };
 export function database(): Db {
   if (g.__abastoDb) return g.__abastoDb;
   const sqlite = (process as any).getBuiltinModule('node:sqlite') as { DatabaseSync: new (p: string) => any };
- const sqlite = (process as any).getBuiltinModule('node:sqlite') as { DatabaseSync: new (p: string) => any };
+ 
 const file = path.resolve(process.env.DATABASE_PATH || (process.env.VERCEL ? '/tmp/.data/abasto.sqlite' : './.data/abasto.sqlite'));
 fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.mkdirSync(path.dirname(file), { recursive: true });
