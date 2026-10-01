@@ -42,7 +42,7 @@ export function database(): Db {
   if (g.__abastoDb) return g.__abastoDb;
   const sqlite = (process as any).getBuiltinModule('node:sqlite') as { DatabaseSync: new (p: string) => any };
  
-const file = path.resolve(process.env.DATABASE_PATH || (process.env.VERCEL ? '/tmp/.data/abasto.sqlite' : './.data/abasto.sqlite'));
+const file = process.env.DATABASE_PATH ? path.resolve(process.env.DATABASE_PATH) : path.join('/tmp', '.data', 'abasto.sqlite');
 fs.mkdirSync(path.dirname(file), { recursive: true });
   
   const raw = new sqlite.DatabaseSync(file);
