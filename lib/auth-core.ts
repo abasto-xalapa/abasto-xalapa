@@ -1,41 +1,66 @@
 import crypto from 'node:crypto';
-import { database } from './db';
+
+export const SESSION_COOKIE = 'abasto_session';
+export const SESSION_SECONDS = 60 * 60 * 24 * 7;
+
+function getSecret(): string {
+  return process.env.AUTH_SECRET || process.env.SESSION_SECRET || 'abasto-secret-xalapa-2026';
+}
+
+export function safeEqual(a: string, b: string): boolean {
+  try {
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    if (bufA.length!== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+  } catch {
+    return a === b;
+  }
+}
 
 function verifyScrypt(password: string, hash: string): boolean {
   try {
     if (!hash.startsWith('scrypt$')) return false;
-    const [_, salt, keyHex] = hash.split('$');
-    if (!salt || !keyHex) return false;
+    const parts = hash.split('$');
+    const salt = parts[1];
+    const keyHex = parts[2];
+    if (!salt ||!keyHex) return false;
     const derived = crypto.scryptSync(password, salt, 64) as Buffer;
     const key = Buffer.from(keyHex, 'hex');
-    if (derived.length !== key.length) return false;
+    if (derived.length!== key.length) return false;
     return crypto.timingSafeEqual(derived, key);
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
-export async function verifyUser(email: string, password: string) {
-  const db = database();
-  // busca en members y en users
-  let row: any = null;
-  try {
-    row = db.raw.prepare('SELECT email, password_hash, role, name FROM members WHERE email = ?').get(email);
-  } catch {}
-  if (!row) {
-    try {
-      const u = db.raw.prepare('SELECT email, password_hash, role FROM users WHERE email = ?').get(email) as any;
-      if (u) row = { email: u.email, password_hash: u.password_hash, role: u.role, name: 'Admin' };
-    } catch {}
-  }
-  if (!row || !row.password_hash) return null;
-
-  const ok = verifyScrypt(password, row.password_hash);
-  if (!ok) return null;
-
-  return { email: row.email, role: row.role, name: row.name || 'Admin' };
+export function verifyPassword(password: string, hash: string): boolean {
+  if (!hash || hash === 'scrypt$08$00') return false;
+  return verifyScrypt(password, hash);
 }
 
 export function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
   const derived = crypto.scryptSync(password, salt, 64) as Buffer;
   return `scrypt$${salt}$${derived.toString('hex')}`;
+}
+
+export function signSession(email: string, name: string): string {
+  const payload = Buffer.from(JSON.stringify({ email, name, exp: Date.now() + SESSION_SECONDS * 1000 })).toString('base64url');
+  const sig = crypto.createHmac('sha256', getSecret()).update(payload).digest('base64url');
+  return `${payload}.${sig}`;
+}
+
+export function parseSession(token: string): { email: string; name: string } | null {
+  try {
+    const [payload, sig] = token.split('.');
+    if (!payload ||!sig) return null;
+    const expected = crypto.createHmac('sha256', getSecret()).update(payload).digest('base64url');
+    if (!safeEqual(sig, expected)) return null;
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString());
+    if (data.exp && Date.now() > data.exp) return null;
+    return { email: data.email, name: data.name };
+  } catch {
+    return null;
+  }
 }
