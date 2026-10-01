@@ -1,11 +1,17 @@
 import { cookies } from 'next/headers';
 import { readSession, SESSION_COOKIE } from './auth-core';
 
-export type SessionUser = { userId: string; email: string; displayName: string };
+export type SessionUser = { userId: string; email: string; displayName: string }
 
-export async function getSessionUser(): Promise<SessionUser | null> {
-  const jar = await cookies();
-  const s = readSession(jar.get(SESSION_COOKIE)?.value);
-  if (!s) return null;
-  return { userId: 'user:' + s.email, email: s.email, displayName: s.name };
+export async function getCurrentUser() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE)?.value;
+  if (!token) return null;
+  const data = readSession(token);
+  if (!data) return null;
+  return { userId: data.email, email: data.email, displayName: data.name };
+}
+
+export async function getSession() {
+  return getCurrentUser();
 }
